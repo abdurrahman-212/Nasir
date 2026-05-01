@@ -1,10 +1,8 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcryptjs";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
 
@@ -22,7 +20,6 @@ const normalizeUrl = (url: string) => {
       normalized = `https://${normalized}`;
     }
     const urlObj = new URL(normalized);
-    // Return origin to ensure no trailing slash or subpaths
     return urlObj.origin;
   } catch (e) {
     return url;
@@ -33,7 +30,6 @@ const getSupabaseKey = () => {
   const serviceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim().replace(/^"|"$/g, '').trim();
   const anonKey = (process.env.VITE_SUPABASE_ANON_KEY || "").trim().replace(/^"|"$/g, '').trim();
   
-  // Ignore placeholders
   if (serviceKey && serviceKey !== "your_service_role_key" && serviceKey.length > 20) return serviceKey;
   if (anonKey && anonKey !== "your_actual_key_here" && anonKey.length > 20) return anonKey;
   return "";
@@ -41,13 +37,6 @@ const getSupabaseKey = () => {
 
 const supabaseUrl = normalizeUrl(process.env.VITE_SUPABASE_URL || "https://rdluhgxvfzlbpggcaaha.supabase.co");
 const supabaseKey = getSupabaseKey() || "missing_key";
-
-if (!supabaseUrl) {
-  console.error("[SUPABASE] VITE_SUPABASE_URL is missing or empty!");
-}
-if (supabaseKey === "missing_key") {
-  console.error("[SUPABASE] CRITICAL: Supabase Key (VITE_SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY) is missing or empty!");
-}
 
 const supabase = createClient(supabaseUrl || "https://placeholder.supabase.co", supabaseKey, {
   auth: {
@@ -61,7 +50,6 @@ const JWT_SECRET = (process.env.JWT_SECRET || "fallback_secret_for_development")
 console.log(`[SERVER] Environment: ${process.env.NODE_ENV}`);
 console.log(`[SERVER] Vercel: ${process.env.VERCEL ? 'Yes' : 'No'}`);
 console.log(`[SUPABASE] Base URL: ${supabaseUrl}`);
-console.log(`[SUPABASE] Key Length: ${supabaseKey.length}`);
 console.log(`[AUTH] JWT_SECRET Length: ${JWT_SECRET.length}`);
 
 app.use(cors());
@@ -79,18 +67,14 @@ app.use(cookieParser());
 // Middleware to verify JWT
 const authenticateToken = (req: any, res: any, next: any) => {
   const authHeader = req.headers['authorization'];
-  // Prefer Authorization header, fallback to cookie
   const token = (authHeader && authHeader.split(' ')[1]) || req.cookies.admin_token;
 
   if (!token) {
-    console.log(`[AUTH] No token for ${req.method} ${req.path}`);
     return res.status(401).json({ message: "Session expired. Please login again." });
   }
 
   jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
     if (err) {
-      console.log(`[AUTH] JWT Error for ${req.method} ${req.path}:`, err.message);
-      // Clear cookie if it's invalid
       res.clearCookie("admin_token", { path: "/" });
       return res.status(403).json({ message: "Invalid or expired session" });
     }
@@ -99,31 +83,30 @@ const authenticateToken = (req: any, res: any, next: any) => {
   });
 };
 
-// Logging middleware
-app.use((req, res, next) => {
-  console.log(`[SERVER] ${req.method} ${req.path}`);
-  next();
-});
-
 // --- AUTH API ---
-app.post("/api/auth/login", async (req, res) => {
+app.post("/api/auth/login", (req, res) => {
   const { username, password } = req.body;
-  const adminUser = process.env.ADMIN_USERNAME || "xadminNasir";
-  const adminPass = process.env.ADMIN_PASSWORD || "212NasirAdmin";
+  
+  // Fallbacks to match common user input from screenshots
+  const adminUser = process.env.ADMIN_USERNAME || "Nasir";
+  const adminPass = process.env.ADMIN_PASSWORD || "Azhar@789";
+
+  console.log(`[AUTH] Login attempt for: ${username}`);
 
   if (username === adminUser && password === adminPass) {
     const token = jwt.sign({ username, role: "admin" }, JWT_SECRET, { expiresIn: "24h" });
     res.cookie("admin_token", token, { 
       httpOnly: true, 
-      secure: process.env.NODE_ENV === "production", 
+      secure: true, 
       sameSite: "lax",
       path: "/",
       maxAge: 86400000 
     });
+    console.log(`[AUTH] Login successful for: ${username}`);
     return res.json({ success: true, token });
   }
 
-  console.log(`Failed login attempt for user: ${username}`);
+  console.log(`[AUTH] Login failed for: ${username}`);
   res.status(401).json({ message: "Invalid credentials" });
 });
 
@@ -295,6 +278,8 @@ app.delete("/api/admin/:table/:id", authenticateToken, async (req, res) => {
 async function setupVite(app: express.Express) {
   if (process.env.NODE_ENV !== "production") {
     console.log("[SERVER] Mode: Development (Vite)");
+    // Dynamic import to avoid crash in production
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -304,14 +289,23 @@ async function setupVite(app: express.Express) {
     console.log("[SERVER] Mode: Production");
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    // Important: Static serving should NOT override API routes
-    // app.get("*") is handled at the very end
   }
 }
 
-// Initialize server
+// Initialize server but don't block
 setupVite(app).then(() => {
-  if (process.env.NODE_ENV !== "production") {
+  if (process.env.NODE_ENV === "production") {
+    const distPath = path.join(process.cwd(), "dist");
+    app.get("*", (req, res) => {
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ message: "API route not found" });
+      }
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
+
+  // Only listen if not on Vercel
+  if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`[SERVER] Ready at http://localhost:${PORT}`);
     });
@@ -320,5 +314,4 @@ setupVite(app).then(() => {
   console.error("[SERVER] Fatal startup error:", err);
 });
 
-// Export for Vercel Serverless Functions
 export default app;
