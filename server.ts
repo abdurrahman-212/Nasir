@@ -307,8 +307,13 @@ async function startServer() {
     });
   } catch (err) {
     console.error("[SERVER] Fatal startup error:", err);
-    process.exit(1);
   }
 }
 
-startServer();
+// Ensure the server starts in local development
+if (process.env.NODE_ENV !== "production") {
+  startServer();
+}
+
+// Export for Vercel Serverless Functions
+export default app;
