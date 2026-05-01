@@ -16,17 +16,24 @@ const normalizeUrl = (url: string) => {
 };
 
 const getSupabaseUrl = () => {
-  const url = import.meta.env.VITE_SUPABASE_URL || "https://rdluhgxvfzlbpggcaaha.supabase.co";
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  if (!url) {
+    console.warn('[SUPABASE] VITE_SUPABASE_URL is missing. Using fallback URL.');
+    return "https://rdluhgxvfzlbpggcaaha.supabase.co";
+  }
   return normalizeUrl(url);
 };
 
 const getSupabaseKey = () => {
   const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim().replace(/^"|"$/g, '').trim();
   
+  if (!anonKey) {
+    console.error('[SUPABASE] VITE_SUPABASE_ANON_KEY is missing!');
+  }
+  
   // Return the key if it looks valid
   if (anonKey && anonKey.length > 10) return anonKey;
   
-  // Fallback for development if allowed, or return empty to trigger error
   return anonKey;
 };
 

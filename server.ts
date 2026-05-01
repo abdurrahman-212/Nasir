@@ -58,6 +58,8 @@ const supabase = createClient(supabaseUrl || "https://placeholder.supabase.co", 
 const JWT_SECRET = (process.env.JWT_SECRET || "fallback_secret_for_development").trim().replace(/^"|"$/g, '');
 
 // Log startup config (masked)
+console.log(`[SERVER] Environment: ${process.env.NODE_ENV}`);
+console.log(`[SERVER] Vercel: ${process.env.VERCEL ? 'Yes' : 'No'}`);
 console.log(`[SUPABASE] Base URL: ${supabaseUrl}`);
 console.log(`[SUPABASE] Key Length: ${supabaseKey.length}`);
 console.log(`[AUTH] JWT_SECRET Length: ${JWT_SECRET.length}`);
@@ -282,38 +284,46 @@ app.delete("/api/admin/:table/:id", authenticateToken, async (req, res) => {
 });
 
 // --- VITE MIDDLEWARE ---
-async function startServer() {
-  try {
-    console.log("[SERVER] Starting server...");
-    
-    if (process.env.NODE_ENV !== "production") {
-      console.log("[SERVER] Mode: Development (Vite)");
-      const vite = await createViteServer({
-        server: { middlewareMode: true },
-        appType: "spa",
-      });
-      app.use(vite.middlewares);
-    } else {
-      console.log("[SERVER] Mode: Production");
-      const distPath = path.join(process.cwd(), "dist");
-      app.use(express.static(distPath));
-      app.get("*", (req, res) => {
-        res.sendFile(path.join(distPath, "index.html"));
-      });
-    }
-
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`[SERVER] Ready at http://localhost:${PORT}`);
+async function setupVite(app: express.Express) {
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[SERVER] Mode: Development (Vite)");
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
     });
-  } catch (err) {
-    console.error("[SERVER] Fatal startup error:", err);
+    app.use(vite.middlewares);
+  } else {
+    console.log("[SERVER] Mode: Production");
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    // Important: Static serving should NOT override API routes
+    // app.get("*") is handled at the very end
   }
 }
 
-// Ensure the server starts in local development
-if (process.env.NODE_ENV !== "production") {
-  startServer();
-}
+// Initialize server but don't block exports
+setupVite(app).then(() => {
+  if (process.env.NODE_ENV === "production") {
+    const distPath = path.join(process.cwd(), "dist");
+    app.get("*", (req, res) => {
+      // Don't serve API routes as HTML
+      if (req.path.startsWith('/api/')) {
+        return res.status(404).json({ message: "API route not found" });
+      }
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
+
+  // Only listen if we are not being used as a serverless function (Vercel)
+  // or if explicitly running locally
+  if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`[SERVER] Ready at http://localhost:${PORT}`);
+    });
+  }
+}).catch(err => {
+  console.error("[SERVER] Fatal startup error:", err);
+});
 
 // Export for Vercel Serverless Functions
 export default app;
