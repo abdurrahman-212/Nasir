@@ -40,20 +40,16 @@ const getSupabaseKey = () => {
 };
 
 const supabaseUrl = normalizeUrl(process.env.VITE_SUPABASE_URL || "https://rdluhgxvfzlbpggcaaha.supabase.co");
-const supabaseKey = getSupabaseKey();
+const supabaseKey = getSupabaseKey() || "missing_key";
 
 if (!supabaseUrl) {
   console.error("[SUPABASE] VITE_SUPABASE_URL is missing or empty!");
 }
-if (!supabaseKey) {
-  console.error("[SUPABASE] Supabase Key is missing or empty!");
+if (supabaseKey === "missing_key") {
+  console.error("[SUPABASE] CRITICAL: Supabase Key (VITE_SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY) is missing or empty!");
 }
 
-if (supabaseUrl && !supabaseUrl.startsWith('https://')) {
-  console.warn("[SUPABASE] URL does not start with https. Connection might fail.");
-}
-
-const supabase = createClient(supabaseUrl, supabaseKey, {
+const supabase = createClient(supabaseUrl || "https://placeholder.supabase.co", supabaseKey, {
   auth: {
     persistSession: false
   }

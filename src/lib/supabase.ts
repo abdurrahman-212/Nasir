@@ -15,26 +15,29 @@ const normalizeUrl = (url: string) => {
   }
 };
 
+const getSupabaseUrl = () => {
+  const url = import.meta.env.VITE_SUPABASE_URL || "https://rdluhgxvfzlbpggcaaha.supabase.co";
+  return normalizeUrl(url);
+};
+
 const getSupabaseKey = () => {
-  const anonKey = ((import.meta as any).env.VITE_SUPABASE_ANON_KEY || "").trim().replace(/^"|"$/g, '').trim();
+  const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim().replace(/^"|"$/g, '').trim();
   
-  // Ignore placeholders
-  if (anonKey && anonKey !== "your_actual_key_here" && anonKey.length > 20) return anonKey;
-  // If we have a hardcoded fallback or something, handle it here if needed
-  // For now return whatever we have but avoid the specific placeholder
+  // Return the key if it looks valid
+  if (anonKey && anonKey.length > 10) return anonKey;
+  
+  // Fallback for development if allowed, or return empty to trigger error
   return anonKey;
 };
 
-const supabaseUrl = normalizeUrl(((import.meta as any).env.VITE_SUPABASE_URL || "https://rdluhgxvfzlbpggcaaha.supabase.co"))
-const supabaseAnonKey = getSupabaseKey()
+const supabaseUrl = getSupabaseUrl();
+const supabaseAnonKey = getSupabaseKey();
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('[SUPABASE] Supabase URL or Anon Key is missing in client environment.')
-} else {
-  console.log('[SUPABASE] Client initialized with URL:', supabaseUrl.substring(0, 15) + '...')
+  console.error('[SUPABASE] CRITICAL: Supabase URL or Anon Key is missing. Check your Vercel Environment Variables (must be prefixed with VITE_).');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl || "https://placeholder.supabase.co", supabaseAnonKey || "missing_key")
 
 export const uploadImage = async (file: File, bucket: string = 'portfolio') => {
   try {
