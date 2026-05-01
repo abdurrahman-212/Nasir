@@ -66,6 +66,14 @@ console.log(`[AUTH] JWT_SECRET Length: ${JWT_SECRET.length}`);
 
 app.use(cors());
 app.use(express.json());
+
+// Request logging for debug
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    console.log(`[API REQUEST] ${req.method} ${req.path}`);
+  }
+  next();
+});
 app.use(cookieParser());
 
 // Middleware to verify JWT
@@ -301,22 +309,9 @@ async function setupVite(app: express.Express) {
   }
 }
 
-// Initialize server but don't block exports
+// Initialize server
 setupVite(app).then(() => {
-  if (process.env.NODE_ENV === "production") {
-    const distPath = path.join(process.cwd(), "dist");
-    app.get("*", (req, res) => {
-      // Don't serve API routes as HTML
-      if (req.path.startsWith('/api/')) {
-        return res.status(404).json({ message: "API route not found" });
-      }
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  }
-
-  // Only listen if we are not being used as a serverless function (Vercel)
-  // or if explicitly running locally
-  if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+  if (process.env.NODE_ENV !== "production") {
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`[SERVER] Ready at http://localhost:${PORT}`);
     });

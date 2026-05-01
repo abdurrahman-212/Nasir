@@ -28,7 +28,8 @@ const getSupabaseKey = () => {
   const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || "").trim().replace(/^"|"$/g, '').trim();
   
   if (!anonKey) {
-    console.error('[SUPABASE] VITE_SUPABASE_ANON_KEY is missing!');
+    console.error('[SUPABASE] CRITICAL: VITE_SUPABASE_ANON_KEY is missing!');
+    console.info('[SUPABASE] Check Vercel Dashboard -> Settings -> Environment Variables. Ensure it starts with VITE_ and you have REDEPLOYED your app.');
   }
   
   // Return the key if it looks valid

@@ -15,13 +15,25 @@ export default function Login() {
     setIsLoading(true);
 
     try {
+      console.log('[AUTH] Attempting login for:', username);
       const response = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({ username, password }),
       });
 
-      const data = await response.json();
+      let data;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        console.error('[AUTH] Non-JSON response:', text);
+        throw new Error(`Server error: ${response.status} ${response.statusText}`);
+      }
 
       if (response.ok) {
         localStorage.setItem('admin_token', data.token);
@@ -30,8 +42,9 @@ export default function Login() {
       } else {
         toast.error(data.message || 'Invalid credentials');
       }
-    } catch (error) {
-      toast.error('Connection failed');
+    } catch (error: any) {
+      console.error('[AUTH] Login error:', error);
+      toast.error(error.message || 'Connection failed. Please check if your backend is running.');
     } finally {
       setIsLoading(false);
     }
